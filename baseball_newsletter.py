@@ -9,7 +9,7 @@ import requests
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
 
 # 테스트용 날짜 (확인 후 None 으로 변경하세요)
-TEST_DATE = None
+TEST_DATE = "2026-05-05"
 
 KBO_TEAM_KEYWORDS = [
     "KIA",
