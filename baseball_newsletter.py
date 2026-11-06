@@ -8,19 +8,24 @@ import requests
 
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
 
+# ==========================================
+# 🧪 테스트용 날짜 설정
+# - 특정 날짜를 테스트하려면 "2026-05-05" 처럼 입력하세요.
+# - 실제 매일 아침 자동 발송할 때는 None 으로 두세요!
+# ==========================================
+TEST_DATE = "2026-11-04"
 
-def get_yesterday_kbo_results(yesterday_date_str):
-    """네이버 스포츠 API를 통해 어제 자 KBO 경기 결과 및 승리/패전/세이브 투수를 가져옵니다.
 
-    yesterday_date_str 형식: 'YYYY-MM-DD'
-    """
+def get_yesterday_kbo_results(target_date_str):
+    """네이버 스포츠 API를 통해 특정 날짜의 KBO 경기 결과 및 투수 기록을 가져옵니다."""
     url = "https://api-gw.sports.naver.com/schedule/games"
     params = {
-        "fields": "basic,superCategory,PitcherResult",
+        # 주의: PitcherResult를 넣으면 400 에러가 발생하므로 'basic'만 사용해야 합니다.
+        "fields": "basic",
         "upperCategoryId": "kbaseball",
         "categoryId": "kbo",
-        "fromDate": yesterday_date_str,
-        "toDate": yesterday_date_str,
+        "fromDate": target_date_str,
+        "toDate": target_date_str,
         "size": 20,
     }
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
@@ -28,6 +33,9 @@ def get_yesterday_kbo_results(yesterday_date_str):
     try:
         response = requests.get(url, params=params, headers=headers, timeout=10)
         if response.status_code != 200:
+            print(
+                f"⚠️ API 호출 실패 (HTTP {response.status_code}): {response.text}"
+            )
             return []
 
         data = response.json()
@@ -40,8 +48,8 @@ def get_yesterday_kbo_results(yesterday_date_str):
 
             away_team = g.get("awayTeamName", "원정팀")
             home_team = g.get("homeTeamName", "홈팀")
-            away_score = g.get("awayTeamScore", 0)
-            home_score = g.get("homeTeamScore", 0)
+            away_score = int(g.get("awayTeamScore", 0))
+            home_score = int(g.get("homeTeamScore", 0))
 
             # 1) 우천 취소 등 경기 취소 케이스
             if "취소" in status_info or status_code == "CANCEL":
@@ -52,9 +60,8 @@ def get_yesterday_kbo_results(yesterday_date_str):
 
             # 2) 정상 종료된 경기 (RESULT)
             if status_code == "RESULT":
-                # 투수 기록 추출 (API 응답 필드가 있는 경우 표시)
-                win_p = g.get("winPitcherName") or g.get("winnerPitcherName")
-                lose_p = g.get("losePitcherName") or g.get("loserPitcherName")
+                win_p = g.get("winnerPitcherName") or g.get("winPitcherName")
+                lose_p = g.get("loserPitcherName") or g.get("losePitcherName")
                 save_p = g.get("savePitcherName")
 
                 away_records = []
@@ -86,7 +93,6 @@ def get_yesterday_kbo_results(yesterday_date_str):
                     f"- **{away_team} {away_score}**{away_rec_str} vs **{home_team} {home_score}**{home_rec_str}"
                 )
             else:
-                # 진행 중이거나 예정된 상태
                 results.append(f"- {away_team} vs {home_team} ({status_info})")
 
         return results
@@ -117,24 +123,29 @@ def get_baseball_news(max_items=5):
 
 
 def send_discord_newsletter():
-    """친근한 대화체로 어제 경기 결과와 오늘 뉴스를 조합해 디스코드로 전송합니다."""
+    """친근한 대화체로 경기 결과와 오늘 뉴스를 조합해 디스코드로 전송합니다."""
     if not DISCORD_WEBHOOK_URL:
         print("❌ 오류: DISCORD_WEBHOOK_URL 환경변수가 설정되지 않았습니다.")
         sys.exit(1)
 
     kst = pytz.timezone("Asia/Seoul")
     now = datetime.datetime.now(kst)
-    yesterday = now - datetime.timedelta(days=1)
-
     today_str = now.strftime("%Y년 %m월 %d일")
-    yesterday_str = "2026-11-04"
-    yesterday_display = yesterday.strftime("%m월 %d일")
 
-    # 1. 어제 경기 결과 및 최신 뉴스 수집
+    # TEST_DATE가 설정되어 있으면 해당 날짜로 조회, 아니면 실제 어제 날짜로 조회
+    if TEST_DATE:
+        target_dt = datetime.datetime.strptime(TEST_DATE, "%Y-%m-%d")
+    else:
+        target_dt = now - datetime.timedelta(days=1)
+
+    yesterday_str = target_dt.strftime("%Y-%m-%d")
+    yesterday_display = target_dt.strftime("%m월 %d일")
+
+    # 1. 경기 결과 및 최신 뉴스 수집
     game_results = get_yesterday_kbo_results(yesterday_str)
     news_items = get_baseball_news(5)
 
-    # 2. 친근한 인사말 및 어제 경기 결과 문구 작성
+    # 2. 친근한 인사말 및 경기 결과 문구 작성
     message_lines = [
         "안녕하세요 KBO 팬 여러분들! ⚾",
         f"어제({yesterday_display})의 경기 결과 알려드릴게요!\n",
@@ -165,7 +176,6 @@ def send_discord_newsletter():
 
     full_description = "\n".join(message_lines)
 
-    # 디스코드에 보낼 데이터(Payload) 구성
     payload = {
         "username": "⚾ KBO 모닝 메이트",
         "embeds": [
@@ -183,7 +193,9 @@ def send_discord_newsletter():
     try:
         response = requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=10)
         if response.status_code in (200, 204):
-            print(f"✅ [{today_str}] 디스코드 뉴스레터 발송 성공!")
+            print(
+                f"✅ [{today_str}] 디스코드 뉴스레터 발송 성공! (조회 날짜: {yesterday_str})"
+            )
         else:
             print(
                 f"❌ 발송 실패 (HTTP {response.status_code}): {response.text}"
