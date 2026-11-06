@@ -1,1 +1,31 @@
+name: Daily Baseball Newsletter
 
+on:
+  schedule:
+    # UTC 00:00 = 한국 시간(KST) 오전 09:00
+    - cron: '0 0 * * *'
+  
+  # GitHub 웹사이트에서 언제든 수동으로 테스트 실행할 수 있게 해주는 옵션
+  workflow_dispatch:
+
+jobs:
+  send-newsletter:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. 저장소 코드 불러오기
+        uses: actions/checkout@v4
+
+      - name: 2. 파이썬 3.11 환경 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 3. 필수 패키지 설치
+        run: pip install -r requirements.txt
+
+      - name: 4. 뉴스레터 발송 스크립트 실행
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python baseball_newsletter.py
