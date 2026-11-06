@@ -127,7 +127,7 @@ def send_discord_newsletter():
     yesterday = now - datetime.timedelta(days=1)
 
     today_str = now.strftime("%Y년 %m월 %d일")
-    yesterday_str = yesterday.strftime("%Y-%m-%d")
+    yesterday_str = "2026-11-04"
     yesterday_display = yesterday.strftime("%m월 %d일")
 
     # 1. 어제 경기 결과 및 최신 뉴스 수집
